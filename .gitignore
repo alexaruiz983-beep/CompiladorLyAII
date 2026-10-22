@@ -1,0 +1,12 @@
+# Entornos y compilación
+bin/
+build/
+dist/
+__pycache__/
+*.class
+*.o
+*.exe
+
+# IDEs
+.vscode/
+.idea/
