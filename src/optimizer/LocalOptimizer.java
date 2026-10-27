@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 
 import optimizer.TACInstruction.Kind;
+//Kind es el enum con los tipos de instrucción (ASSIGN, BINARY, LABEL, GOTO, IF_GOTO, READ, WRITE). 
+// Importarlo permite escribir Kind.LABEL en vez de TACInstruction.Kind.LABEL.
 
 /**
  * Optimización local: trabaja dentro de cada bloque básico
@@ -26,23 +28,26 @@ public class LocalOptimizer {
     public boolean strengthReduction = true;
     public boolean propagation       = true;
     public boolean commonSubexpr     = true;
+    //Una bandera por técnica. Son públicas para poder apagarlas desde fuera y mostrar el antes y el después.
 
     // ---------------------------------------------------------------
     public List<TACInstruction> optimize(List<TACInstruction> code) {
         List<TACInstruction> out = new ArrayList<>();
         List<TACInstruction> block = new ArrayList<>();
+        //out es el resultado final. block acumula las instrucciones del bloque básico actual.
 
-        for (TACInstruction in : code) {
-            if (in.kind == Kind.LABEL) {
-                optimizeBlock(block, out);
+        for (TACInstruction in : code) {   //Una etiqueta empieza un bloque nuevo, porque alguien puede saltar ahí desde otro lado. 
+            if (in.kind == Kind.LABEL) {   //Por eso se optimiza lo acumulado, se vacía block, se agrega la etiqueta tal cual y se 
+                optimizeBlock(block, out);  //pasa a la siguiente instrucción. Se usa copy() para no modificar la lista original.
                 block.clear();
                 out.add(in.copy());
                 continue;
             }
-            block.add(in.copy());
-            if (in.isJump()) {
-                optimizeBlock(block, out);
-                block.clear();
+            block.add(in.copy());        //Cualquier otra instrucción se agrega al bloque. Si es un salto (goto o if ... goto),
+            if (in.isJump()) {           //el bloque termina ahí, así que se optimiza y se vacía. Al salir del ciclo se optimiza 
+                optimizeBlock(block, out);//lo que haya quedado pendiente.
+                block.clear();            //Esto es importante porque todas las técnicas siguientes solo son seguras dentro de un bloque.
+                                         //Con un salto de por medio no se sabe qué valores tienen las variables.
             }
         }
         optimizeBlock(block, out);
