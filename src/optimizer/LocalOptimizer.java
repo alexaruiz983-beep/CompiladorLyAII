@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import optimizer.Kind;
+import optimizer.TACInstruction.Kind;
 
 /**
  * Optimización local: trabaja dentro de cada bloque básico
