@@ -1,29 +1,22 @@
 package optimizer;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Instrucción de código de tres direcciones.
- *
- * Formato de texto:
- *   t1 = a + b      BINARY
- *   x = t1          ASSIGN
- *   L1:             LABEL
- *   goto L1         GOTO
- *   if t1 goto L2   IF_GOTO
- *   read x          READ
- *   write x         WRITE
- *
- * NOTA: si el equipo de código intermedio (P2) ya tiene su propia clase,
- * basta con adaptar los campos o escribir un conversor hacia/desde esta.
+ * Una instrucción de código de tres direcciones. Formato de texto:
+ *   t1 = a + b     BINARY      x = t1        ASSIGN
+ *   L1:            LABEL       goto L1       GOTO
+ *   if t1 goto L2  IF_GOTO     read x        READ
+ *   write x        WRITE
  */
 public class TACInstruction {
 
     public enum Kind { ASSIGN, BINARY, LABEL, GOTO, IF_GOTO, READ, WRITE }
 
     public Kind kind;
-    public String result;  // destino, o nombre de etiqueta en LABEL / GOTO / IF_GOTO
-    public String arg1;
-    public String op;
-    public String arg2;
+    public String result;   // destino, o nombre de la etiqueta en LABEL / GOTO / IF_GOTO
+    public String arg1, op, arg2;
 
     public TACInstruction(Kind kind, String result, String arg1, String op, String arg2) {
         this.kind = kind;
@@ -33,68 +26,37 @@ public class TACInstruction {
         this.arg2 = arg2;
     }
 
-    // ---- constructores de conveniencia ----
-    public static TACInstruction assign(String r, String a)              { return new TACInstruction(Kind.ASSIGN, r, a, null, null); }
-    public static TACInstruction binary(String r, String a, String op, String b) { return new TACInstruction(Kind.BINARY, r, a, op, b); }
-    public static TACInstruction label(String l)                         { return new TACInstruction(Kind.LABEL, l, null, null, null); }
-    public static TACInstruction jump(String l)                          { return new TACInstruction(Kind.GOTO, l, null, null, null); }
-    public static TACInstruction ifGoto(String cond, String l)           { return new TACInstruction(Kind.IF_GOTO, l, cond, null, null); }
-    public static TACInstruction read(String v)                          { return new TACInstruction(Kind.READ, v, null, null, null); }
-    public static TACInstruction write(String v)                         { return new TACInstruction(Kind.WRITE, null, v, null, null); }
-
     public TACInstruction copy() {
         return new TACInstruction(kind, result, arg1, op, arg2);
     }
 
-    /** Variable que esta instrucción define (escribe), o null. */
-    public String defines() {
-        switch (kind) {
-            case ASSIGN: case BINARY: case READ: return result;
-            default: return null;
-        }
-    }
-
-    /** Operandos que esta instrucción lee. */
-    public java.util.List<String> uses() {
-        java.util.List<String> u = new java.util.ArrayList<>();
-        switch (kind) {
-            case ASSIGN: case IF_GOTO: case WRITE: u.add(arg1); break;
-            case BINARY: u.add(arg1); u.add(arg2); break;
-            default: break;
-        }
-        return u;
-    }
-
-    public boolean isJump() { return kind == Kind.GOTO || kind == Kind.IF_GOTO; }
-
-    // ---- texto <-> objeto ----
+    /**
+     * Convierte una línea de texto en instrucción (los tokens van separados por espacios).
+     * Acepta también el formato del generador del equipo:  "3: t1 := a + b"
+     * (quita el número de línea "3:" y cambia ":=" por "=").
+     */
     public static TACInstruction parse(String line) {
-        line = line.trim();
-        if (line.endsWith(":"))             return label(line.substring(0, line.length() - 1).trim());
-        if (line.startsWith("goto "))       return jump(line.substring(5).trim());
-        if (line.startsWith("read "))       return read(line.substring(5).trim());
-        if (line.startsWith("write "))      return write(line.substring(6).trim());
-        if (line.startsWith("if ")) {
-            String[] p = line.substring(3).trim().split("\\s+goto\\s+");
-            return ifGoto(p[0].trim(), p[1].trim());
+        String[] t = line.trim().replaceFirst("^\\d+:\\s*", "").replace(":=", "=").split("\\s+");
+        if (t[0].endsWith(":")) return new TACInstruction(Kind.LABEL, t[0].substring(0, t[0].length() - 1), null, null, null);
+        switch (t[0]) {
+            case "goto":  return new TACInstruction(Kind.GOTO, t[1], null, null, null);
+            case "read":  return new TACInstruction(Kind.READ, t[1], null, null, null);
+            case "write": return new TACInstruction(Kind.WRITE, null, t[1], null, null);
+            case "if":    return new TACInstruction(Kind.IF_GOTO, t[3], t[1], null, null);   // if cond goto L
         }
-        String[] sides = line.split("\\s*=\\s*", 2);
-        if (sides.length != 2) throw new IllegalArgumentException("TAC inválido: " + line);
-        String[] rhs = sides[1].trim().split("\\s+");
-        if (rhs.length == 1) return assign(sides[0].trim(), rhs[0]);
-        if (rhs.length == 3) return binary(sides[0].trim(), rhs[0], rhs[1], rhs[2]);
-        throw new IllegalArgumentException("TAC inválido: " + line);
+        // t[0] = t[2]     o     t[0] = t[2] op t[4]
+        return t.length == 3 ? new TACInstruction(Kind.ASSIGN, t[0], t[2], null, null)
+                             : new TACInstruction(Kind.BINARY, t[0], t[2], t[3], t[4]);
     }
 
-    public static java.util.List<TACInstruction> parseAll(String text) {
-        java.util.List<TACInstruction> out = new java.util.ArrayList<>();
-        for (String l : text.split("\\R")) {
-            if (!l.trim().isEmpty()) out.add(parse(l));
-        }
+    public static List<TACInstruction> parseAll(String text) {
+        List<TACInstruction> out = new ArrayList<>();
+        for (String line : text.split("\\R"))
+            if (!line.trim().isEmpty() && !line.startsWith("=")) out.add(parse(line));   // salta encabezado "=== ... ==="
         return out;
     }
 
-    public static String format(java.util.List<TACInstruction> code) {
+    public static String format(List<TACInstruction> code) {
         StringBuilder sb = new StringBuilder();
         for (TACInstruction i : code) sb.append(i).append('\n');
         return sb.toString();
