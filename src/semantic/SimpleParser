@@ -1,0 +1,132 @@
+package proyecto_lya2;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+
+public class SimpleParser {
+   private SymbolTable symbolTable = new SymbolTable();
+   private SemanticAnalyzer analyzer;
+
+   public SimpleParser() {
+      this.analyzer = new SemanticAnalyzer(this.symbolTable);
+   }
+
+   public void parseFile(String filePath) {
+      try {
+         BufferedReader br = new BufferedReader(new FileReader(filePath));
+
+         try {
+            boolean inVarSection = false;
+            System.out.println("=== LEYENDO ARCHIVO FUENTE: " + filePath + " ===\n");
+
+            String line;
+            while((line = br.readLine()) != null) {
+               line = line.trim();
+               if (!line.isEmpty()) {
+                  if (line.equalsIgnoreCase("VAR")) {
+                     inVarSection = true;
+                  } else if (line.equalsIgnoreCase("BEGIN")) {
+                     inVarSection = false;
+                     this.symbolTable.printTable();
+                  } else {
+                     if (inVarSection && line.contains(":")) {
+                        this.processDeclaration(line);
+                     }
+
+                     if (!inVarSection && line.contains(":=")) {
+                        this.processAssignment(line);
+                     }
+
+                     if (!inVarSection && line.toUpperCase().startsWith("IF")) {
+                        this.processIfCondition(line);
+                     }
+                  }
+               }
+            }
+
+            System.out.println("--------------------------------------------------");
+            System.out.println("¡ÉXITO! El programa fue analizado y no contiene errores semánticos.");
+         } catch (Throwable var6) {
+            try {
+               br.close();
+            } catch (Throwable var5) {
+               var6.addSuppressed(var5);
+            }
+
+            throw var6;
+         }
+
+         br.close();
+      } catch (IOException e) {
+         System.err.println("Error al abrir el archivo: " + e.getMessage());
+      } catch (SemanticException e) {
+         System.err.println("\n[ERROR SEMÁNTICO DETECTADO]: " + e.getMessage());
+      }
+
+   }
+
+   private void processDeclaration(String line) throws SemanticException {
+      line = line.replace(";", "").trim();
+      String[] parts = line.split(":");
+      if (parts.length == 2) {
+         String[] vars = parts[0].split(",");
+         String type = parts[1].trim();
+
+         for(String v : vars) {
+            String varName = v.trim();
+            if (!varName.isEmpty()) {
+               this.analyzer.declareVariable(varName, type);
+            }
+         }
+      }
+
+   }
+
+   private void processAssignment(String line) throws SemanticException {
+      line = line.replace(";", "").trim();
+      String[] parts = line.split(":=");
+      String varName = parts[0].trim();
+      String expression = parts[1].trim();
+      System.out.println("Analizando asignación: " + varName + " := " + expression);
+      String exprType = this.inferExpressionType(expression);
+      this.analyzer.validateAssignment(varName, exprType);
+   }
+
+   private void processIfCondition(String line) throws SemanticException {
+      System.out.println("Analizando condición del IF: " + line);
+      this.analyzer.validateConditionExpression("BOOLEAN");
+   }
+
+   private String inferExpressionType(String expr) throws SemanticException {
+      if (!expr.equalsIgnoreCase("TRUE") && !expr.equalsIgnoreCase("FALSE")) {
+         String[] tokens = expr.split("\\s+");
+         String currentType = null;
+
+         for(String token : tokens) {
+            if (!token.equals("+") && !token.equals("-") && !token.equals("*") && !token.equals("/")) {
+               String tokenType;
+               if (this.symbolTable.contains(token)) {
+                  tokenType = this.symbolTable.getType(token);
+               } else {
+                  if (!token.matches("\\d+(\\.\\d+)?")) {
+                     continue;
+                  }
+
+                  tokenType = "REAL";
+               }
+
+               if (currentType == null) {
+                  currentType = tokenType;
+               } else {
+                  currentType = this.analyzer.checkBinaryOperation(currentType, "+", tokenType);
+               }
+            }
+         }
+
+         return currentType != null ? currentType : "REAL";
+      } else {
+         return "BOOLEAN";
+      }
+   }
+}
